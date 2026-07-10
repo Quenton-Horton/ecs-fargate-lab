@@ -1,0 +1,81 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'index.html'
+      - 'taskdef.json'
+      - '.github/workflows/deploy.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: ecs-fargate-lab
+  ECS_CLUSTER: ecs-fargate-lab-cluster
+  ECS_SERVICE: ecs-fargate-lab-service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Render task definition
+        env:
+          IMAGE: ${{ steps.build.outputs.image }}
+        run: |
+          jq --arg IMG "$IMAGE" '.containerDefinitions[0].image = $IMG' taskdef.json > rendered.json
+          echo "--- rendered.json ---"
+          cat rendered.json
+          jq empty rendered.json && echo "JSON valid"
+
+      - name: Register and deploy
+        run: |
+          set -e
+          ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://rendered.json \
+            --query "taskDefinition.taskDefinitionArn" \
+            --output text)
+          echo "Registered task def: $ARN"
+          if [ -z "$ARN" ]; then
+            echo "ERROR: empty task definition ARN"
+            exit 1
+          fi
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$ARN" \
+            --force-new-deployment
+          echo "Service update submitted"
+
+      - name: Wait for service stability
+        run: |
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"

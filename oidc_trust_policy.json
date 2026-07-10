@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::287773673131:oidc-provider/://githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "://githubusercontent.com:aud": "://amazonaws.com"
+        },
+        "StringLike": {
+          "://githubusercontent.com:sub": "https://github.com/Quenton-Horton/ecs-fargate-lab"
+        }
+      }
+    }
+  ]
+}
+
