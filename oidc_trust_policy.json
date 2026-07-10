@@ -4,18 +4,17 @@
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::287773673131:oidc-provider/://githubusercontent.com"
+        "Federated": "arn:aws:iam::287773673131:oidc-provider/token.actions.githubusercontent.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "://githubusercontent.com:aud": "://amazonaws.com"
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
         },
         "StringLike": {
-          "://githubusercontent.com:sub": "https://github.com/Quenton-Horton/ecs-fargate-lab"
+          "token.actions.githubusercontent.com:sub": "repo:Quenton-Horton/ecs-fargate-lab:*"
         }
       }
     }
   ]
 }
-
